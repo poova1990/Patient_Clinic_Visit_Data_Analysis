@@ -1,0 +1,191 @@
+---
+title: "MSK"
+author: "Poovaragavan Selvaraj"
+date: "6/27/2019"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+```{r}
+#Loading the required Libraries for Data Analysis
+library(ggplot2)
+library(dplyr)
+library(lattice)
+library(tidyr)
+library(tidyverse)
+library(lubridate)
+library("readxl")
+setwd("C:/Users/priya/OneDrive/Documents/Rprojects")
+require("tidyverse")
+require(sqldf)
+
+#Loading the MSKAnalysisExercise.xlsx file into patient 
+patient= read_excel('MSKAnalysisExercise.xlsx')
+patient
+
+head(patient)
+
+#To identify total no of visits in the patient dataset
+Totalrecords=sqldf("select count(*) as Total_patient_visits from patient")
+Totalrecords
+
+#To identify count of patients under each category
+sqldf("select PATIENT_CONDITION,count(*) from patient group by PATIENT_CONDITION")
+
+#To identify count of Male/Female patients
+sqldf("select sex,count(*) patient_count from patient group by sex ")
+
+
+#To identify different sex
+sqldf("select distinct sex from patient")
+
+
+
+#To identify the type of medical condition the clinic treats
+
+sqldf("select distinct PATIENT_CONDITION from patient")
+
+#To identify the count of visits under each medical condition the clinic treats for each sex
+
+sqldf("select PATIENT_CONDITION,sex,count(*) from patient group by PATIENT_CONDITION,sex order by sex ")
+
+
+#TO look at age pattern using histogram
+
+hist(patient$AGE)
+
+
+# To see the time difference between patient scheduled time and arrival time
+difftime(patient$PT_SCHEDULED_APPT,patient$PT_ARRIVE_TIME,units="mins")
+
+
+# Which provider got more patients
+
+sqldf("select count(*) as Total_no_of_Patients,PROVIDER_NAME from patient group by PROVIDER_NAME order by Total_no_of_Patients desc")
+
+#Calculating the time difference between scheduled and arrival time, doctor visit start and end time, patient arrival #and start time
+
+diff_schedule_arrival_time = difftime(patient$PT_SCHEDULED_APPT,patient$PT_ARRIVE_TIME,units="mins")
+diff_schedule_arrival_time
+
+patient_doctor_visit_time = round(difftime(patient$PT_END_TIME,patient$PT_START_TIME,units="mins"))
+patient_doctor_visit_time
+
+patient_wait_time = round(difftime(patient$PT_START_TIME,patient$PT_ARRIVE_TIME,units="mins"))
+patient_wait_time
+
+#Binding the newly created variables to patient dataset 
+patient= cbind(patient,diff_schedule_arrival_time,patient_doctor_visit_time,patient_wait_time)
+patient
+
+
+avgtimetaken= sqldf("select PROVIDER_NAME,avg(patient_doctor_visit_time) as avgtime_taken_per_patient from patient group by PROVIDER_NAME order by avgtime_taken_per_patient desc ")
+avgtimetaken
+
+
+noofpatientsseen=sqldf("select count(*) as number_of_patients,PROVIDER_NAME,avg(patient_doctor_visit_time) from patient group by PROVIDER_NAME order by number_of_patients ")
+noofpatientsseen
+
+waittime_after_arrival=sqldf("select PROVIDER_NAME,round(avg(patient_wait_time)) as Wait_Time from patient group by PROVIDER_NAME ")
+waittime_after_arrival
+
+
+#patients with which insurance are more
+
+sqldf("select count(*) as PatientCount,INSURANCE_TYPE from patient group by INSURANCE_TYPE order by PatientCount")
+
+#Seperating the month, year and date for monthly data analysis
+
+patient=separate(patient,VISIT_DATE,c("VisitYear","VisitMonth","VisitDate"),sep = "-",remove =FALSE)
+
+#Calcualting the no of patients visits per month 
+patients_permonth= sqldf("select VisitMonth,count(*) as patients_permonth from patient group by VisitMonth order by VisitMonth asc ")
+
+ggplot(patients_permonth, aes(x=VisitMonth,y=patients_permonth)) + geom_point() +
+ylab('Number of patients per month')
+
+#Calculating the % of patients who came on time, delay and arrived early as below
+
+sqldf("select count(*) from patient where diff_schedule_arrival_time ='0' ")
+
+
+sqldf("select count(*) from patient where diff_schedule_arrival_time >0 ")
+
+
+sqldf("select count(*) from patient where diff_schedule_arrival_time <0 ")
+
+#Finding the repeating patients to the clinic
+
+sqldf("select count(distinct(patient_id)) as patients from patient where patient_id in (select PATIENT_ID from patient group by PATIENT_ID having count(*)>1)")
+
+# To identify if the repeating patients came for same medical condition or different medical condition
+
+sqldf("select patient_id,PATIENT_CONDITION
+ from patient where patient_id in (select PATIENT_ID from patient group by PATIENT_ID having count(*)>1) order by patient_id")
+
+#Finding out the count of repeating patients for each provider and medical condition
+
+repeat_patient=sqldf("select PROVIDER_NAME,PATIENT_CONDITION,count(*) from patient where patient_id in(select patient_id from patient)group by provider_name,PATIENT_CONDITION")
+repeat_patient
+
+#what % of patients are arriving on time
+
+percent_patient_arriveontime=sqldf("select count(*) from patient where diff_schedule_arrival_time=0 ")
+ontime=(percent_patient_arriveontime/5757)*100
+ontime
+
+#what % of patients are arriving early
+percent_patient_earlytime=sqldf("select count(*) from patient where diff_schedule_arrival_time <0 ")
+earlytime=(percent_patient_earlytime/5757)*100
+earlytime
+
+#what % of patients are arriving late
+percent_patient_arrivelate=sqldf("select count(*) from patient where diff_schedule_arrival_time>1 ")
+latetime=(percent_patient_arrivelate/5757)*100
+latetime
+
+#Finding out the medicalcondition that is treated under different age category
+
+sqldf("select PATIENT_CONDITION as AGE16_BTW_AGE30,count(*) as visit_count  from patient where age between 16 AND 30 group by PATIENT_CONDITION ") 
+
+
+sqldf("select PATIENT_CONDITION as AGE31_BTW_AGE50,count(*) as visit_count from patient where age between 31 AND 50 group by PATIENT_CONDITION ") 
+
+
+sqldf("select PATIENT_CONDITION as AGE51_BTW_AGE84,count(*) as visit_count from patient where age between 51 AND 84 group by PATIENT_CONDITION ") 
+
+#Finding out max and min age of the patient visited the clinic in 2005
+sqldf("select max(age) from patient")
+
+sqldf("select min(age) from patient")
+
+#plotting patient condition vs no of visits
+ggplot(patient, aes(x = PATIENT_CONDITION)) + geom_bar()
+
+#plotting Insurance type vs patients
+
+ggplot(patient, aes(x = INSURANCE_TYPE)) + geom_bar()
+
+#plotting patient condition vs sex
+ggplot(patient, aes(x = PATIENT_CONDITION, fill = SEX)) + geom_bar(position = "dodge")
+
+#plotting the appointment schedule, it is clear that the clinic is more busy in the morning
+ggplot(patient, aes(x = PT_SCHEDULED_APPT)) + geom_bar()
+
+#Provider vs no of patients they handled
+ggplot(patient, aes(x = PROVIDER_NAME)) + geom_bar()
+
+#Looking at the age distribution for the clinic
+
+ggplot(patient, aes(x = AGE)) + geom_bar()
+
+sqldf("select age
+,count(*) from patient group by age order by count(*) desc")
+
+sqldf("select PATIENT_CONDITION,count(*) from patient where age=42 group by PATIENT_CONDITION ")
+
+```
+
+
+
